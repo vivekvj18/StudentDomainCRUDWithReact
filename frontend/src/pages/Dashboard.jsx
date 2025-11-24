@@ -3,13 +3,14 @@ import "../styles/App.css";
 
 const Dashboard = ({ onLogout }) => {
   const [domains, setDomains] = useState([]);
-  const [email, setEmail] = useState("");
+  // OAuth mein email direct storage mein nahi hota, isliye default 'Admin' dikhayenge
+  const [email, setEmail] = useState("Admin");
 
-  // --- Modals State (Popup kholne/band karne ke liye) ---
+  // --- Modals State ---
   const [showDomainModal, setShowDomainModal] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
 
-  // --- Domain Form State (Add/Edit ke liye) ---
+  // --- Domain Form State ---
   const [domainForm, setDomainForm] = useState({
     domainId: "",
     program: "",
@@ -25,18 +26,23 @@ const Dashboard = ({ onLogout }) => {
 
   // 1. Initial Load
   useEffect(() => {
-    setEmail(sessionStorage.getItem("authEmail"));
     fetchDomains();
   }, []);
 
-  const getToken = () => sessionStorage.getItem("authToken");
+  // ✅ Common Fetch Function (OAuth/Cookies ke liye)
+  // Ye function ensure karega ki Cookies backend tak pahunche
+  const authFetch = (url, options = {}) => {
+    return fetch(url, {
+      ...options,
+      credentials: "include" // 🍪 Zaroori: Isse Cookies automatic send hoti hain
+    });
+  };
 
   // 2. Fetch All Domains
   const fetchDomains = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/domains", {
-        headers: { Authorization: "Basic " + getToken() },
-      });
+      // Purana 'headers: Authorization' hata diya
+      const response = await authFetch("http://localhost:8080/api/domains");
       if (response.ok) {
         const data = await response.json();
         setDomains(data);
@@ -50,9 +56,8 @@ const Dashboard = ({ onLogout }) => {
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to delete this domain?")) return;
     try {
-      await fetch(`http://localhost:8080/api/domains/${id}`, {
+      await authFetch(`http://localhost:8080/api/domains/${id}`, {
         method: "DELETE",
-        headers: { Authorization: "Basic " + getToken() },
       });
       fetchDomains(); // Refresh List
     } catch (error) {
@@ -70,18 +75,18 @@ const Dashboard = ({ onLogout }) => {
     const method = isEditing ? "PUT" : "POST";
 
     try {
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method: method,
         headers: {
-          "Content-Type": "application/json",
-          Authorization: "Basic " + getToken(),
+          "Content-Type": "application/json", // Content-Type abhi bhi chahiye
+          // Authorization header hata diya
         },
         body: JSON.stringify(domainForm),
       });
 
       if (response.ok) {
         setShowDomainModal(false);
-        fetchDomains(); // List Update karo
+        fetchDomains(); // List Update
         alert(isEditing ? "Domain Updated!" : "Domain Added!");
       } else {
         alert("Failed to save domain");
@@ -112,9 +117,7 @@ const Dashboard = ({ onLogout }) => {
     setStudents([]); // Clear old data
 
     try {
-      const response = await fetch(`http://localhost:8080/api/domains/${id}/students`, {
-        headers: { Authorization: "Basic " + getToken() },
-      });
+      const response = await authFetch(`http://localhost:8080/api/domains/${id}/students`);
       if (response.ok) {
         const data = await response.json();
         setStudents(data);
@@ -131,7 +134,7 @@ const Dashboard = ({ onLogout }) => {
         <div className="header">
           <div>
             <h2>🎓 Domain Manager</h2>
-            <p>Hello, <span>{email || "Admin"}</span></p>
+            <p>Hello, <span>{email}</span></p>
           </div>
           <button onClick={onLogout} className="btn btn-danger">Logout</button>
         </div>

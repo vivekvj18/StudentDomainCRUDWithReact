@@ -1,14 +1,10 @@
 package com.domaincrud.domaincrud.config;
 
-import com.domaincrud.domaincrud.service.EmployeeUserDetailsService;
+import com.domaincrud.domaincrud.service.CustomOAuth2UserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -21,33 +17,34 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final EmployeeUserDetailsService employeeUserDetailsService;
+    private final CustomOAuth2UserService customOAuth2UserService;
 
-    public SecurityConfig(EmployeeUserDetailsService employeeUserDetailsService) {
-        this.employeeUserDetailsService = employeeUserDetailsService;
+    // Humne EmployeeUserDetailsService hata diya, kyunki ab password check Google karega
+    public SecurityConfig(CustomOAuth2UserService customOAuth2UserService) {
+        this.customOAuth2UserService = customOAuth2UserService;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // ✅ CORS enabled here
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
-                        .requestMatchers("/api/domains/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
+                        .requestMatchers("/", "/login", "/error").permitAll() // Login page sabke liye khula hai
+                        .anyRequest().authenticated() // Baaki sabke liye login zaroori
                 )
-                .httpBasic(Customizer.withDefaults());
+                // ✅ Yahan humne OAuth2 Login Joda hai
+                .oauth2Login(oauth -> oauth
+                        // Humara naya Watchman (Logic) yahan set kiya
+                        .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
 
-        http.userDetailsService(employeeUserDetailsService);
+                        // Login Success hone par kahan bhejna hai? (React Dashboard)
+                        .defaultSuccessUrl("http://localhost:5173/dashboard", true)
+                )
+                .logout(logout -> logout
+                        .logoutSuccessUrl("http://localhost:5173/") // Logout ke baad wapis home/login page par
+                        .permitAll()
+                );
 
         return http.build();
     }
@@ -55,10 +52,8 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-
-        // 🔥 CHANGE: Use 'AllowedOriginPatterns' with "*" to allow ALL frontend URLs
+        // Sab kuch allow kar rahe hain taaki koi error na aaye
         configuration.setAllowedOriginPatterns(List.of("*"));
-
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -66,10 +61,5 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 }
